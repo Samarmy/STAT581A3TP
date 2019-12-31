@@ -1,0 +1,267 @@
+---
+title: "STAT-581A3 Final"
+author: "Sam Armstrong"
+date: "12/19/2019"
+output: pdf_document
+---
+
+```{r FinalSetup, message=FALSE, warning=FALSE}
+# clear output
+# rm(list = ls()) 
+library(knitr)
+```
+
+## 1. Mammals Sleep
+```{r setup1, include=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(car)
+library(ggplot2)
+library(MuMIn)
+data(msleep)
+sleepdata <- msleep
+```
+
+### 1A.  Checking out the data
+```{r, out.height="150px", message=FALSE, warning=FALSE}
+help(msleep)
+length(sleepdata$name)
+length(unique(sleepdata$name))
+```
+
+1. Name is likely a poor predictor because it is a categorical predictor that has a unique value for every row of the sleep data's dataframe and therefore won't be a good predictor in a linear model. 
+
+```{r, message=FALSE, warning=FALSE}
+table(sleepdata[complete.cases(sleepdata$genus),]$genus)[1:5]
+```
+
+2. Genus will perform poorly because it is a categorical predictor that is unique to most of the rows 77/83 and there are some unique values like Acinonyx and Aotus that are used only once and therefore won't be a good predictor in a linear model.
+
+
+```{r, message=FALSE, warning=FALSE}
+table(sleepdata[complete.cases(sleepdata$order),]$order)[c(1, 2, 3, 4, 11)]
+```
+
+3. Order is similar has the same issues as Genus with unique variables like Afrosoricida and Lagomorpha
+
+```{r, message=FALSE, warning=FALSE}
+table(sleepdata[complete.cases(sleepdata),]$conservation)
+```
+
+4. Conservation could also have the same problem that genus and order have if completed cases is used on all the variables in the dataset with unique variables like nt and vu.
+
+5. Awake is a bad predictor for sleep_total because when awake and sleep_total are added together they always equal 24 (hours) and are therefore inversely related and shouldn't be used as predictor variables for one another. 
+
+### 1B.
+```{r, out.height= "150px", message=FALSE, warning=FALSE}
+sleepdata$facsleep <- NA
+sleepdata$facsleep[sleepdata$sleep_total < 6] <- 1
+sleepdata$facsleep[sleepdata$sleep_total >= 6 & sleepdata$sleep_total < 10] <- 2
+sleepdata$facsleep[sleepdata$sleep_total >= 10] <-  3
+sleepdata$facsleep <- factor(sleepdata$facsleep)
+ggplot(sleepdata, aes(vore)) + aes(fill=facsleep)+ geom_bar(position="stack") + scale_fill_discrete(labels = c("low", "moderate", "high")) + ggtitle("Number of Vores by Sleep Factor for Sleep Dataset") + labs(x="Vore", y="Number of Mammals per Vore") + coord_flip()
+```
+
+### 1C.
+```{r, out.height="150px", message=FALSE, warning=FALSE}
+# sleepdata[c(6,10,11)]
+sleepdata$brainwt <- log(sleepdata$brainwt)
+sleepdata$bodywt <- log(sleepdata$bodywt)
+levels(sleepdata$facsleep) <- c("[1.9, 6) low","[6, 10) moderate","[10, 19.9] high")
+qplot(brainwt ,bodywt ,data=sleepdata) + aes(shape=facsleep,colour=facsleep)+ geom_point()
+levels(sleepdata$facsleep) <- c(1, 2, 3)
+```
+
+```{r, message=FALSE, warning=FALSE}
+sleepdata <- sleepdata[, -c(1, 2, 4, 9, 12)]
+# sleepdata
+```
+
+Dropped Name, Genus, and Order because they have a unique categorical value when using complete cases and they messed up dredge and model selection functions. Dropped awake because it's inversely related to sleep_total. Dropped facsleep because it's derived from sleep_total. 
+
+**Put all summary and add functions in Appendix to save space
+ 
+### 1D.
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+FullModel <-lm(sleep_total~. , data = sleepdata, na.action=na.omit)
+NullModel <-lm(sleep_total~1, data = sleepdata, na.action=na.omit)
+Model1 <- NullModel
+add1(Model1, scope = FullModel, test = "F")
+Model1 <-update(Model1,~.+sleep_rem)
+```
+
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+add1(Model1, scope = FullModel, test = "F")
+Model1 <-update(Model1,~.+brainwt)
+```
+
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+add1(Model1, scope = FullModel, test = "F")
+FinalSum <- Model1
+summary(FinalSum)
+```
+
+```{r, message=FALSE, warning=FALSE}
+Anova(FinalSum, type=3)
+```
+... `r FinalSum$r.squared` 
+
+I chose the model by starting with a null model and adding the variable with the lowest AIC. The R^2 was 0.6397 so the model is only explaining about 64% of the proportion of the variance while excluding only 35 observations because of the complete case on the variables sleep_rem and brainwt. 
+
+### 1E.
+```{r, message=FALSE, warning=FALSE}
+library(MuMIn)
+complete.sleepdata = sleepdata[complete.cases(sleepdata), ]
+FullModel <-lm(sleep_total~., data = complete.sleepdata)
+options(na.action = "na.fail")
+dredge(FullModel, rank = "AIC")[1:5];
+```
+
+The number of observations included in the dredge function after the complete.cases is 20. 
+
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+Final1Sum <- lm(sleep_total~brainwt+sleep_rem, data = complete.sleepdata)
+summary(Final1Sum)
+```
+
+```{r, message=FALSE, warning=FALSE}
+Anova(Final1Sum, type = 3)
+```
+...  `r Final1Sum$r.squared` 
+
+The R^2 for this model is 0.7734 so the model is only explaining about 77% of the proportion of the variance which is better than the model from 1.D which is excluding less rows than this model because this model is excluding all the rows with any missing variables. 
+
+### 1F.
+```{r, message=FALSE, warning=FALSE}
+smallsleep <- complete.sleepdata[, -c(2)]
+FullModel3 <-lm(sleep_total~., data = smallsleep)
+options(na.action = "na.fail")
+dredge(FullModel3, rank = "AIC")[1:5];
+```
+
+The number of observations included in the dredge function after the complete.cases is still 20. I excluded the variable conservation because it has unique categorical variable that is only used once after the complete.cases is applied. 
+
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+Final2Sum <- lm(sleep_total~brainwt+sleep_rem, data = smallsleep)
+summary(Final2Sum)
+```
+
+```{r, message=FALSE, warning=FALSE}
+Anova(Final2Sum, type = 3)
+```
+... `r Final2Sum$r.squared` 
+
+The R^2 for this model is still 0.7734 and is exactly the same as the model from 1.E because excluding the variable conservation didn't seem to affect the model or the data. All three models from 1.D, 1.E, and 1.F all use the same predictor variables brainwt and sleep_rem.
+
+### 1G.
+I would use the model from part D. Even though this model performs the worse (R^2) and its coefficients are only slightly different than the other models, this model is looking at more of the data (48 instead of 20 observations) which is more than twice the data. Also because dropping data because its missing variables that aren't being used and unnecessarily reducing your sample size is going to limit your models training data and ability to fit to the true, complete, dataset (if it exists).
+
+## 2. Gun Laws and Homicide
+```{r setup2, include=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+GunData <- read.csv("/s/chopin/k/grad/sarmst/stat581A3/GunData.csv", row.names = 1)
+str(GunData)
+```
+
+### 2A. Scatter plot and coefficient of correlation
+```{r, out.height="150px", echo=FALSE, message=FALSE, warning=FALSE}
+qplot(HomicideRate ,BradyScore ,data=GunData) + geom_smooth(method="lm", se=FALSE) + geom_point() + labs(title = "State Homicide Rate as function of Brady Score")
+round(cor(GunData[, -c(1)]), 4)
+```
+
+Yes when applying a correlation matrix to the gundata, Homicide and Bradyscore have a correlation of 0.0655 which matches the articles +.065 correlation. The plot above shows a very weak positive relationship and correlation between HomicideRate and BradyScore.
+
+
+### 2B. Fit Model
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+SumModel1 = lm(HomicideRate~ BradyScore, data=GunData)
+SumModel1$coefficients
+summary(SumModel1)
+```
+
+The p-value is 0.6479 for the BradyScore and the slope direction is slightly positive but very close to horizontal. The proportion of variance explained by this model is 0.0043.
+
+### 2C. Diagnostic 
+```{r, out.height= "150px", message=FALSE, warning=FALSE}
+plot(SumModel1, which=c(1))
+resid(SumModel1)["District of Columbia"]
+rstudent(SumModel1)["District of Columbia"]
+GunData <- read.csv("/s/chopin/k/grad/sarmst/stat581A3/GunData.csv", row.names = 1)
+GunData <- GunData[-c(9),]
+```
+
+The District of Columbia seems like a concern/outlier for this model. The District of Columbia's raw residual is 9.227648 and the rstudent is 4.797049 which are both the maximum values in the dataset. The issue with including this data point is that the District of Columbia is an entirely urban area which means 100% of its crimes are in urban areas which isn't the case for all the other states.
+
+### 2D. Choropleth
+```{r, out.height="200px", message=FALSE, warning=FALSE}
+library(maps,warn.conflicts=FALSE,quietly=TRUE)
+states <- map_data("state")
+
+GunData$region <- tolower(rownames(GunData))
+chor <- merge(states, GunData, by = "region")
+
+chor = chor[order(chor$order), ]
+
+qplot(long, lat, data = chor, group = group, fill=HomicideRate, geom = "polygon")
+```
+
+It looks like the Northwestern states (Washington to Wisconsin) have lower homicide rates.
+
+### 2E Pair-wise scatter plots
+```{r, out.height="250px", message=FALSE, warning=FALSE}
+QuantVars <- GunData[c(2:7)]
+#E1.
+pairs(QuantVars)
+#E2.
+round((cor(QuantVars)),4)
+#E3.
+cor.test(QuantVars$HomicideRate, QuantVars$Poverty)
+cor.test(QuantVars$HomicideRate, QuantVars$PerDgr)
+```
+
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+#E3.
+cor.test(QuantVars$HomicideRate, QuantVars$PerUrban)
+cor.test(QuantVars$HomicideRate, QuantVars$MedAge)
+cor.test(QuantVars$HomicideRate, QuantVars$BradyScore)
+```
+
+**Excluded non-significant Pearson Test outputs to save space.
+
+It looks like poverty is significantly correlated to HomicideRate with a P-value of 3.761e-07 and PerDgr is significantly correlated to HomicideRate with a P-value of 0.001558. 
+
+### 2F.
+```{r, message=FALSE, warning=FALSE}
+#2F1
+GunData$NewBrady <- c(GunData$BradyScore + 10)
+#2F2
+GunModelSum <- lm(HomicideRate ~ NewBrady*Region+Poverty*Region, data=GunData)
+Anova(GunModelSum, type = 3)
+#2F3
+summary(GunModelSum)
+```
+
+**I chose the model with the separate interactions of NewBrady with Region and Poverty with Region because it gave the best adjusted R^2.
+
+**Says to use variable Region with capital R in question 2F2 wasn't sure if you meant using the variable region with a lowercase R defined earlier in question 2D.  
+
+The P-value for the NewBrady score without interaction is 0.0759, the ones with interaction with Region are 0.3678, 0.6826, and 0.1763. The direction of the NewBrady score without interaction and with interaction in the South is still slightly positive while interestingly it is slightly negative with interactions in the Northeast and West. So yes the NewBrady without interaction and with interaction in the South is still in the wrong direction, but not with interactions in the Northeast and West. The proportion of variance explained by this model is 0.6786.  
+
+### 2G1. 
+```{r, out.height="100px", message=FALSE, warning=FALSE}
+GunData$BradyCat[GunData$BradyScore > 30] <- "HiBrady"
+GunData$BradyCat[GunData$BradyScore <= 30] <- "LoBrady"
+```
+
+Some of the states/Regions seem to have different responses to the predictor variables (which may be caused by different ranges of Brady scores) so by grouping the states into low and high BradyScores, we may be able to group together the states that respond more similarly to the predictor variables.
+
+### 2G2.
+```{r, out.height= "200px", message=FALSE, warning=FALSE}
+ggplot(GunData, aes(x=Poverty, y=HomicideRate, shape=BradyCat, color=BradyCat)) + geom_point() + geom_smooth(method=lm, se=FALSE, fullrange = TRUE)
+```
+
+### 2G3. 
+The plot from 2G2 shows that the states with high Brady Scores have a negative relationship between Poverty and HomicideRate while states with low Brady Scores have a positive relationship. This shows that not all the states have the same responses to the predictor variables and should probably be analyzed separately. Other grouping like Region could also be used.   
+
+# Appendix
+```{r show-code, ref.label = all_labels(), echo = TRUE, eval = FALSE}
+```
